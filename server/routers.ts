@@ -37,18 +37,31 @@ export const appRouter = router({
       const allMetrics: any[] = [];
       
       for (const company of companies || []) {
-        const metrics = await getMetrics(company.id);
-        allMetrics.push(...metrics);
+        const companyMetrics = await getMetrics(company.id);
+        if (companyMetrics) {
+          allMetrics.push(...companyMetrics);
+        }
       }
       
-      return allMetrics;
+      return allMetrics || [];
     }),
   }),
   
   synthesis: router({
     bySector: publicProcedure.input(z.string()).query(async ({ input }) => {
       const { getSynthesis } = await import('./db');
-      return getSynthesis(input);
+      const result = await getSynthesis(input);
+      
+      return result || {
+        id: 0,
+        sector: input,
+        period: 'Q1FY24',
+        synthesisText: 'Sector synthesis will be generated after initial data ingestion. Check back after the first refresh cycle.',
+        investingLensText: 'Investing lens insights will appear here after metrics are extracted and analyzed across the sector companies.',
+        generatedAt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
     }),
   }),
   
