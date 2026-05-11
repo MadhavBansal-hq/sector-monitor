@@ -8,6 +8,7 @@ import { fetchAllDocumentsForCompany } from '../ingestion/sources';
 import { fetchAndParseDocument } from '../ingestion/parser';
 import { extractMetricsBySector } from '../extraction/metrics';
 import { generateSectorSynthesis, getMostRecentQuarters } from '../synthesis/engine';
+import { notifyRefreshCompletion, notifyCriticalFailure, notifySynthesisGenerated } from '../notifications/owner';
 
 export interface RefreshResult {
   sector: string;
@@ -130,8 +131,26 @@ export async function refreshSector(sector: 'fintech' | 'defence' | 'biotech'): 
         documentsChecked,
         newDocumentsFound,
         errors: errors.length > 0 ? JSON.stringify(errors) : null,
-        status: errors.length > 0 ? 'completed' : 'completed',
+        status: 'completed',
       });
+    }
+    
+    // Send notifications
+    if (errors.length > 0) {
+      const failedCompanies = companies
+        .filter((c: any) => errors.some(e => e.includes(c.name)))
+        .map((c: any) => c.name);
+      
+      if (failedCompanies.length > 0) {
+        await notifyCriticalFailure(sector, failedCompanies, errors[0] || 'Unknown error');
+      }
+    } else {
+      await notifyRefreshCompletion(sector, documentsChecked, newDocumentsFound, []);
+    }
+    
+    // Notify synthesis generation
+    if (synthesis) {
+      await notifySynthesisGenerated(sector, synthesis.period);
     }
     
     return {
@@ -139,7 +158,7 @@ export async function refreshSector(sector: 'fintech' | 'defence' | 'biotech'): 
       documentsChecked,
       newDocumentsFound,
       errors,
-      status: errors.length === 0 ? 'completed' : 'completed',
+      status: 'completed',
     };
   } catch (error) {
     const errorMsg = `Critical error during refresh: ${error}`;
@@ -153,6 +172,9 @@ export async function refreshSector(sector: 'fintech' | 'defence' | 'biotech'): 
         status: 'failed',
       });
     }
+    
+    // Notify of critical failure
+    await notifyCriticalFailure(sector, [], errorMsg);
     
     return {
       sector,
