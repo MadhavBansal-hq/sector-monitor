@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { eq, and, desc, asc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { InsertUser, users, companies, documents, metrics, synthesis, refreshLog } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -89,4 +89,160 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+// Company queries
+export async function getCompanies(sector?: string) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  if (sector) {
+    return db.select().from(companies).where(eq(companies.sector, sector as any));
+  }
+  return db.select().from(companies);
+}
+
+export async function getCompanyById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  const result = await db.select().from(companies).where(eq(companies.id, id)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function createCompany(data: any) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  const result = await db.insert(companies).values(data);
+  return result;
+}
+
+// Document queries
+export async function getDocuments(companyId?: number, status?: string) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  if (companyId && status) {
+    return db.select().from(documents).where(
+      and(eq(documents.companyId, companyId), eq(documents.parseStatus, status as any))
+    );
+  }
+  if (companyId) {
+    return db.select().from(documents).where(eq(documents.companyId, companyId));
+  }
+  return db.select().from(documents);
+}
+
+export async function getDocumentByUrl(url: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  const result = await db.select().from(documents).where(eq(documents.sourceUrl, url)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function createDocument(data: any) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  const result = await db.insert(documents).values(data);
+  return result;
+}
+
+export async function updateDocument(id: number, data: any) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  return db.update(documents).set(data).where(eq(documents.id, id));
+}
+
+// Metrics queries
+export async function getMetrics(companyId: number, period?: string) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  if (period) {
+    return db.select().from(metrics).where(
+      and(eq(metrics.companyId, companyId), eq(metrics.period, period))
+    );
+  }
+  return db.select().from(metrics).where(eq(metrics.companyId, companyId));
+}
+
+export async function createMetric(data: any) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  return db.insert(metrics).values(data);
+}
+
+export async function createMetrics(data: any[]) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  return db.insert(metrics).values(data);
+}
+
+// Synthesis queries
+export async function getSynthesis(sector: string, period?: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  if (period) {
+    const result = await db.select().from(synthesis).where(
+      and(eq(synthesis.sector, sector as any), eq(synthesis.period, period))
+    ).limit(1);
+    return result.length > 0 ? result[0] : undefined;
+  }
+  
+  const result = await db.select().from(synthesis).where(eq(synthesis.sector, sector as any)).orderBy(desc(synthesis.period)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getSynthesisByPeriod(sector: string, limit: number = 4) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return db.select().from(synthesis).where(eq(synthesis.sector, sector as any)).orderBy(desc(synthesis.period)).limit(limit);
+}
+
+export async function createSynthesis(data: any) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  return db.insert(synthesis).values(data);
+}
+
+export async function updateSynthesis(id: number, data: any) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  return db.update(synthesis).set(data).where(eq(synthesis.id, id));
+}
+
+// Refresh log queries
+export async function createRefreshLog(data: any) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  return db.insert(refreshLog).values(data);
+}
+
+export async function getLatestRefreshLog(sector?: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  if (sector) {
+    const result = await db.select().from(refreshLog).where(eq(refreshLog.sector, sector as any)).orderBy(desc(refreshLog.runTimestamp)).limit(1);
+    return result.length > 0 ? result[0] : undefined;
+  }
+  
+  const result = await db.select().from(refreshLog).orderBy(desc(refreshLog.runTimestamp)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function updateRefreshLog(id: number, data: any) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  return db.update(refreshLog).set(data).where(eq(refreshLog.id, id));
+}
