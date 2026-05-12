@@ -90,6 +90,27 @@ export async function parsePDF(url: string): Promise<string> {
 }
 
 /**
+ * Chunk content into overlapping segments for LLM processing
+ */
+function chunkContent(content: string, chunkSize: number = 2000, overlap: number = 200): string[] {
+  if (content.length <= chunkSize) {
+    return [content];
+  }
+
+  const chunks: string[] = [];
+  let start = 0;
+
+  while (start < content.length) {
+    const end = Math.min(start + chunkSize, content.length);
+    chunks.push(content.slice(start, end));
+    start = end - overlap;
+    if (start < 0) start = 0;
+  }
+
+  return chunks;
+}
+
+/**
  * Fetch and parse document from URL
  */
 export async function fetchAndParseDocument(url: string, title: string): Promise<ParsedDocument | null> {
@@ -102,28 +123,28 @@ export async function fetchAndParseDocument(url: string, title: string): Promise
     let content = '';
     
     // Determine content type
-    const contentType = response.headers['content-type'] || '';
+    const contentType = (response.headers && response.headers['content-type']) || '';
     
-    if (url.endsWith('.pdf') || contentType.includes('application/pdf')) {
+    if (url.endsWith('.pdf') || (typeof contentType === 'string' && contentType.includes('application/pdf'))) {
       // For PDFs, we'd need pdf-parse library
-      content = `[PDF Document: ${title}]`;
-    } else if (contentType.includes('text/html') || url.endsWith('.html')) {
-      content = await parseHTML(url, response.data);
-    } else if (contentType.includes('text/plain') || url.endsWith('.txt')) {
-      content = response.data;
+      content = await parsePDF(url);
+    } else if (typeof contentType === 'string' && contentType.includes('text/html') || url.endsWith('.html')) {
+      content = await parseHTML(url, response.data as string);
+    } else if (typeof contentType === 'string' && contentType.includes('text/plain') || url.endsWith('.txt')) {
+      content = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
     } else {
-      // Try HTML parsing as fallback
-      content = await parseHTML(url, response.data);
+      // Try to parse as JSON or other formats
+      content = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
     }
     
     if (!content) {
       console.warn(`[Parser] No content extracted from ${url}`);
       return null;
     }
-    
-    // Chunk the content
+
+    // Split into chunks
     const chunks = chunkContent(content);
-    
+
     return {
       content,
       chunks,
@@ -135,82 +156,7 @@ export async function fetchAndParseDocument(url: string, title: string): Promise
       },
     };
   } catch (error) {
-    console.error(`[Parser] Error fetching document from ${url}:`, error);
+    console.error(`[Parser] Error fetching/parsing document from ${url}:`, error);
     return null;
   }
-}
-
-/**
- * Intelligent chunking for LLM processing
- * Splits content into manageable chunks while preserving context
- */
-export function chunkContent(content: string, chunkSize: number = 4000, overlap: number = 200): string[] {
-  const chunks: string[] = [];
-  
-  // Split by paragraphs first
-  const paragraphs = content.split(/\n\n+/).filter(p => p.trim().length > 0);
-  
-  let currentChunk = '';
-  
-  for (const paragraph of paragraphs) {
-    const potentialChunk = currentChunk + (currentChunk ? '\n\n' : '') + paragraph;
-    
-    if (potentialChunk.length <= chunkSize) {
-      currentChunk = potentialChunk;
-    } else {
-      // Current chunk is full, save it
-      if (currentChunk) {
-        chunks.push(currentChunk);
-      }
-      
-      // Start new chunk with overlap from previous
-      const overlapText = currentChunk.slice(-overlap);
-      currentChunk = overlapText + '\n\n' + paragraph;
-      
-      // If paragraph itself is larger than chunk size, split it
-      if (currentChunk.length > chunkSize) {
-        // Split by sentences
-        const sentences = paragraph.match(/[^.!?]+[.!?]+/g) || [paragraph];
-        currentChunk = '';
-        
-        for (const sentence of sentences) {
-          const potentialSentenceChunk = currentChunk + (currentChunk ? ' ' : '') + sentence.trim();
-          
-          if (potentialSentenceChunk.length <= chunkSize) {
-            currentChunk = potentialSentenceChunk;
-          } else {
-            if (currentChunk) {
-              chunks.push(currentChunk);
-            }
-            currentChunk = sentence.trim();
-          }
-        }
-      }
-    }
-  }
-  
-  // Add final chunk
-  if (currentChunk) {
-    chunks.push(currentChunk);
-  }
-  
-  return chunks.filter(chunk => chunk.trim().length > 0);
-}
-
-/**
- * Validate and clean extracted content
- */
-export function validateContent(content: string): boolean {
-  // Check minimum length
-  if (content.length < 100) {
-    return false;
-  }
-  
-  // Check for meaningful content (not just HTML tags or whitespace)
-  const textContent = content.replace(/<[^>]*>/g, '').trim();
-  if (textContent.length < 100) {
-    return false;
-  }
-  
-  return true;
 }

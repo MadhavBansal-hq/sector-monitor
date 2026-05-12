@@ -1,11 +1,8 @@
 /**
- * Document Ingestion Pipeline
- * Fetches earnings transcripts, investor presentations, and quarterly financials
- * from multiple sources: SEC EDGAR, BSE/NSE, Screener.in, Macrotrends, Brave Search
+ * Document Ingestion Sources
  */
 
 import axios from 'axios';
-import * as cheerio from 'cheerio';
 
 export interface SourceDocument {
   url: string;
@@ -17,270 +14,87 @@ export interface SourceDocument {
   content?: string;
 }
 
-/**
- * SEC EDGAR - US Companies (Biotech)
- * Fetches 10-Q, 10-K, 8-K filings
- */
 export async function fetchFromSECEdgar(ticker: string, cik: string): Promise<SourceDocument[]> {
   const documents: SourceDocument[] = [];
-  
+  if (!cik) return documents;
+
   try {
-    // SEC EDGAR API endpoint for company filings
     const edgarUrl = `https://data.sec.gov/submissions/CIK${cik.padStart(10, '0')}.json`;
-    const response = await axios.get(edgarUrl, { timeout: 10000 });
-    
-    const filings = response.data.filings.recent.filings || [];
-    
-    for (const filing of filings.slice(0, 20)) {
-      const form = filing.form;
+    const resp = await axios.get(edgarUrl, { timeout: 10000 });
+    const filings = resp.data.filings?.recent?.filings || resp.data.filings?.recent?.accessionNumbers || [];
+
+    // Best-effort parsing
+    const recent = resp.data.filings?.recent?.recent || resp.data.filings?.recent || resp.data.filings || [];
+    // Fallback: if structure unknown, return empty
+    if (!Array.isArray(recent)) return documents;
+
+    for (const filing of recent.slice(0, 20)) {
+      const form = filing.form || filing.type || filing.formType;
       let documentType: SourceDocument['documentType'] = 'other';
-      
       if (form === '10-Q') documentType = 'quarterly_financial_statement';
       else if (form === '10-K') documentType = 'annual_report';
-      else if (form === '8-K') documentType = 'other';
-      
-      const accessionNumber = filing.accessionNumber.replace(/-/g, '');
-      const url = `https://www.sec.gov/cgi-bin/viewer?action=view&cik=${cik}&accession_number=${filing.accessionNumber}&xbrl_type=v`;
-      
+
+      const filingDate = filing.filingDate || filing.filing_date || filing.date || filing.filingdate || '';
+      const accession = filing.accessionNumber || filing.accession || '';
+      const url = accession
+        ? `https://www.sec.gov/ix?doc=/Archives/edgar/data/${cik}/${accession.replace(/-/g, '')}/${accession}.txt`
+        : `https://www.sec.gov/`; 
+
       documents.push({
         url,
-        title: `${ticker} ${form} - ${filing.filingDate}`,
+        title: `${ticker} ${form} - ${filingDate}`,
         documentType,
-        period: filing.filingDate,
+        period: filingDate || '',
         company: ticker,
         sector: 'biotech',
       });
     }
-  } catch (error) {
-    console.error(`[SEC EDGAR] Error fetching ${ticker}:`, error);
+  } catch (e) {
+    console.warn(`[SECEdgar] failed for ${ticker}:`, e?.message ?? e);
   }
-  
+
   return documents;
 }
 
-/**
- * BSE/NSE Filings Portal - Indian Companies
- * Fetches concall transcripts and annual reports
- */
-export async function fetchFromBSENSE(company: string, sector: string): Promise<SourceDocument[]> {
-  const documents: SourceDocument[] = [];
-  
-  try {
-    // BSE/NSE filings typically require scraping or API access
-    // Using a generic search approach for demonstration
-    const searchUrl = `https://www.bseindia.com/corporates/`;
-    
-    // In production, this would require proper authentication and parsing
-    // For now, we'll return empty and rely on Screener.in for Indian data
-    console.log(`[BSE/NSE] Placeholder for ${company}`);
-  } catch (error) {
-    console.error(`[BSE/NSE] Error fetching ${company}:`, error);
-  }
-  
-  return documents;
+export async function fetchFromBSENSE(company: string): Promise<SourceDocument[]> {
+  // Placeholder - live scraping of BSE/NSE needs selectors and might be fragile
+  // Return empty array to avoid introducing brittle code
+  return [];
 }
 
-/**
- * Screener.in - Indian Financial Data
- * Fetches structured historical financials and reports
- */
-export async function fetchFromScreener(company: string, sector: string): Promise<SourceDocument[]> {
-  const documents: SourceDocument[] = [];
-  
-  try {
-    // Screener.in provides structured financial data
-    // This would require API access or web scraping
-    const screenerUrl = `https://www.screener.in/company/${company.toLowerCase()}/`;
-    
-    // In production, parse the page to extract financial statements
-    console.log(`[Screener.in] Placeholder for ${company}`);
-  } catch (error) {
-    console.error(`[Screener.in] Error fetching ${company}:`, error);
-  }
-  
-  return documents;
+export async function fetchFromScreener(company: string): Promise<SourceDocument[]> {
+  // Placeholder - Screener scraping is beyond scope; return empty
+  return [];
 }
 
-/**
- * Macrotrends.net - Historical Financial Data
- * Fetches historical financials for US companies
- */
-export async function fetchFromMacrotrends(ticker: string): Promise<SourceDocument[]> {
-  const documents: SourceDocument[] = [];
-  
-  try {
-    // Macrotrends provides historical financial data
-    const macrotrendsUrl = `https://www.macrotrends.net/stocks/charts/${ticker.toLowerCase()}/`;
-    
-    // In production, parse financial statements from the page
-    console.log(`[Macrotrends] Placeholder for ${ticker}`);
-  } catch (error) {
-    console.error(`[Macrotrends] Error fetching ${ticker}:`, error);
-  }
-  
-  return documents;
-}
+export async function fetchAllDocumentsForCompany(company: string, ticker: string, sector: string, cik: string): Promise<SourceDocument[]> {
+  const results: SourceDocument[] = [];
 
-/**
- * Brave Search API - Document Discovery
- * Uses Brave Search to locate IR pages and filing PDFs
- */
-export async function fetchFromBraveSearch(company: string, sector: string): Promise<SourceDocument[]> {
-  const documents: SourceDocument[] = [];
-  
   try {
-    // Brave Search API for locating documents
-    // Requires API key from environment
-    const braveApiKey = process.env.BRAVE_SEARCH_API_KEY;
-    
-    if (!braveApiKey) {
-      console.warn('[Brave Search] API key not configured');
-      return documents;
+    if (sector === 'biotech') {
+      const edgar = await fetchFromSECEdgar(ticker, cik);
+      results.push(...edgar);
     }
-    
-    const searchQueries = [
-      `${company} earnings call transcript filetype:pdf`,
-      `${company} investor presentation filetype:pdf`,
-      `${company} quarterly financial statement filetype:pdf`,
-      `${company} annual report filetype:pdf`,
-    ];
-    
-    for (const query of searchQueries) {
-      const braveUrl = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}`;
-      
-      const response = await axios.get(braveUrl, {
-        headers: {
-          'Accept': 'application/json',
-          'X-Subscription-Token': braveApiKey,
-        },
-        timeout: 10000,
-      });
-      
-      const results = response.data.web || [];
-      
-      for (const result of results.slice(0, 5)) {
-        let documentType: SourceDocument['documentType'] = 'other';
-        
-        if (query.includes('earnings')) documentType = 'earnings_call_transcript';
-        else if (query.includes('presentation')) documentType = 'investor_presentation';
-        else if (query.includes('financial')) documentType = 'quarterly_financial_statement';
-        else if (query.includes('annual')) documentType = 'annual_report';
-        
-        documents.push({
-          url: result.url,
-          title: result.title,
-          documentType,
-          period: new Date().toISOString().split('T')[0],
-          company,
-          sector,
-        });
-      }
-    }
-  } catch (error) {
-    console.error(`[Brave Search] Error fetching ${company}:`, error);
-  }
-  
-  return documents;
-}
 
-/**
- * Company IR Pages - Direct Scraping
- * Fetches investor presentations and reports from company websites
- */
-export async function fetchFromCompanyIR(company: string, irPageUrl: string): Promise<SourceDocument[]> {
-  const documents: SourceDocument[] = [];
-  
-  try {
-    const response = await axios.get(irPageUrl, { timeout: 10000 });
-    const $ = cheerio.load(response.data);
-    
-    // Look for PDF links and document references
-    const links = $('a[href*=".pdf"]');
-    
-    links.each((_: number, element: any) => {
-      const href = $(element).attr('href');
-      const text = $(element).text();
-      
-      if (href) {
-        const fullUrl = href.startsWith('http') ? href : new URL(href, irPageUrl).href;
-        
-        let documentType: SourceDocument['documentType'] = 'other';
-        
-        if (text.toLowerCase().includes('earnings') || text.toLowerCase().includes('transcript')) {
-          documentType = 'earnings_call_transcript';
-        } else if (text.toLowerCase().includes('presentation')) {
-          documentType = 'investor_presentation';
-        } else if (text.toLowerCase().includes('financial') || text.toLowerCase().includes('statement')) {
-          documentType = 'quarterly_financial_statement';
-        } else if (text.toLowerCase().includes('annual')) {
-          documentType = 'annual_report';
-        }
-        
-        documents.push({
-          url: fullUrl,
-          title: text || 'Investor Document',
-          documentType,
-          period: new Date().toISOString().split('T')[0],
-          company,
-          sector: 'unknown',
-        });
-      }
+    // For Indian companies we might use Screener/BSE data
+    const screener = await fetchFromScreener(company);
+    results.push(...screener);
+
+    const bse = await fetchFromBSENSE(company);
+    results.push(...bse);
+
+    // Dedupe by URL
+    const seen = new Set<string>();
+    const unique = results.filter((d) => {
+      if (!d.url) return false;
+      if (seen.has(d.url)) return false;
+      seen.add(d.url);
+      return true;
     });
-  } catch (error) {
-    console.error(`[Company IR] Error fetching from ${irPageUrl}:`, error);
-  }
-  
-  return documents;
-}
 
-/**
- * Fetch all available documents for a company
- */
-export async function fetchAllDocumentsForCompany(
-  company: string,
-  ticker: string,
-  sector: string,
-  cik?: string,
-  irPageUrl?: string
-): Promise<SourceDocument[]> {
-  const allDocuments: SourceDocument[] = [];
-  
-  // Fetch from all available sources
-  if (sector === 'biotech' && cik) {
-    const secDocs = await fetchFromSECEdgar(ticker, cik);
-    allDocuments.push(...secDocs);
+    return unique;
+  } catch (e) {
+    console.error(`[Sources] fetchAllDocumentsForCompany error for ${company}:`, e);
+    return [];
   }
-  
-  if (sector === 'fintech' || sector === 'defence') {
-    const screenerDocs = await fetchFromScreener(company, sector);
-    allDocuments.push(...screenerDocs);
-  }
-  
-  if (sector === 'biotech') {
-    const macroDocs = await fetchFromMacrotrends(ticker);
-    allDocuments.push(...macroDocs);
-  }
-  
-  // Always try Brave Search
-  const braveDocs = await fetchFromBraveSearch(company, sector);
-  allDocuments.push(...braveDocs);
-  
-  // Try company IR page if provided
-  if (irPageUrl) {
-    const irDocs = await fetchFromCompanyIR(company, irPageUrl);
-    allDocuments.push(...irDocs);
-  }
-  
-  // Deduplicate by URL
-  const uniqueUrls = new Set<string>();
-  const deduplicatedDocs: SourceDocument[] = [];
-  
-  for (const doc of allDocuments) {
-    if (!uniqueUrls.has(doc.url)) {
-      uniqueUrls.add(doc.url);
-      deduplicatedDocs.push(doc);
-    }
-  }
-  
-  return deduplicatedDocs;
 }
