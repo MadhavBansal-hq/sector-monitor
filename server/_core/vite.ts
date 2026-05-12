@@ -33,10 +33,16 @@ export async function setupVite(app: Express, server: Server) {
 
       // always reload the index.html file from disk in case it changes
       let template = await fs.promises.readFile(clientTemplate, "utf-8");
-      template = template.replace(
-        `src="/src/main.tsx"`,
-        `src="/src/main.tsx?v=${nanoid()}"`
-      );
+      // Replace a clear marker token with the app entry script (more robust than string-replace)
+      const appEntryToken = "<!-- APP_ENTRY -->";
+      const entryScript = `\n    <script type="module" src="/src/main.tsx?v=${nanoid()}"></script>\n`;
+      if (template.includes(appEntryToken)) {
+        template = template.replace(appEntryToken, entryScript);
+      } else {
+        // Fallback to previous replace for compatibility
+        template = template.replace(`src="/src/main.tsx"`, `src="/src/main.tsx?v=${nanoid()}"`);
+      }
+
       const page = await vite.transformIndexHtml(url, template);
       res.status(200).set({ "Content-Type": "text/html" }).end(page);
     } catch (e) {

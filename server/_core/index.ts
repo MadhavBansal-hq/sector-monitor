@@ -31,6 +31,28 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
+
+  // Security headers middleware (conservative defaults)
+  app.use((req, res, next) => {
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Permissions-Policy', 'geolocation=(), microphone=()');
+
+    // Content-Security-Policy: allow self and basic resources; allow inline for analytics injection (consider tightening with nonces)
+    const csp = [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline'",
+      "connect-src 'self'",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "img-src 'self' data:",
+      "font-src 'self' https://fonts.gstatic.com",
+    ].join('; ');
+
+    res.setHeader('Content-Security-Policy', csp);
+    next();
+  });
+
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
