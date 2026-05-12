@@ -43,7 +43,16 @@ export async function setupVite(app: Express, server: Server) {
         template = template.replace(`src="/src/main.tsx"`, `src="/src/main.tsx?v=${nanoid()}"`);
       }
 
+      // Inject CSP nonce token
+      const nonce = (res as any).locals?.cspNonce || '';
+      template = template.replace(/<!-- CSP_NONCE -->/g, nonce);
+
       const page = await vite.transformIndexHtml(url, template);
+      // Ensure CSP header includes the nonce (double-check)
+      if (nonce) {
+        res.setHeader('Content-Security-Policy', `default-src 'self'; script-src 'self' 'nonce-${nonce}'; connect-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com`);
+      }
+
       res.status(200).set({ "Content-Type": "text/html" }).end(page);
     } catch (e) {
       vite.ssrFixStacktrace(e as Error);
@@ -66,7 +75,21 @@ export function serveStatic(app: Express) {
   app.use(express.static(distPath));
 
   // fall through to index.html if the file doesn't exist
-  app.use("*", (_req, res) => {
-    res.sendFile(path.resolve(distPath, "index.html"));
+  app.use("*", async (req, res) => {
+    try {
+      const indexPath = path.resolve(distPath, "index.html");
+      let template = await fs.promises.readFile(indexPath, "utf-8");
+      const nonce = (res as any).locals?.cspNonce || '';
+      template = template.replace(/<!-- CSP_NONCE -->/g, nonce);
+
+      if (nonce) {
+        res.setHeader('Content-Security-Policy', `default-src 'self'; script-src 'self' 'nonce-${nonce}'; connect-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com`);
+      }
+
+      res.status(200).set({ "Content-Type": "text/html" }).end(template);
+    } catch (e) {
+      console.error('Error serving static index.html', e);
+      res.status(500).send('Server error');
+    }
   });
 }

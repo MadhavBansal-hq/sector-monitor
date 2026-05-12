@@ -19,7 +19,7 @@
     <div id="root"></div>
     <!-- APP_ENTRY -->
 
-    <script>
+    <script nonce="<!-- CSP_NONCE -->">
       (function() {
         // Vite will replace %VITE_ANALYTICS_ENDPOINT% and %VITE_ANALYTICS_WEBSITE_ID% at build time.
         const endpoint = '%VITE_ANALYTICS_ENDPOINT%';
@@ -30,6 +30,11 @@
             s.defer = true;
             s.src = endpoint.replace(/\/$/, '') + '/umami';
             s.setAttribute('data-website-id', id);
+            // For CSP compliance, set the same nonce on injected script
+            const nonce = '<!-- CSP_NONCE -->';
+            if (nonce && nonce.indexOf('<!--') === -1) {
+              s.setAttribute('nonce', nonce);
+            }
             document.head.appendChild(s);
           } catch (e) {
             // swallow - analytics is optional

@@ -8,6 +8,7 @@ import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import crypto from "crypto";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -32,17 +33,22 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
 
-  // Security headers middleware (conservative defaults)
+  // Security headers middleware (per-request nonce for CSP)
   app.use((req, res, next) => {
+    // Generate per-request nonce for CSP
+    const nonce = crypto.randomBytes(16).toString("base64");
+    (res as any).locals = (res as any).locals || {};
+    (res as any).locals.cspNonce = nonce;
+
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Permissions-Policy', 'geolocation=(), microphone=()');
 
-    // Content-Security-Policy: allow self and basic resources; allow inline for analytics injection (consider tightening with nonces)
+    // Content-Security-Policy with nonce for inline scripts
     const csp = [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline'",
+      `script-src 'self' 'nonce-${nonce}'`,
       "connect-src 'self'",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "img-src 'self' data:",
