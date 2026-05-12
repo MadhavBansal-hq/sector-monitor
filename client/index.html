@@ -6,21 +6,38 @@
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1" />
-    <title>Sector Intelligence Monitor</title>    
-    <!-- THIS IS THE START OF A COMMENT BLOCK, BLOCK TO BE DELETED: Google Fonts here, example:
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-    THIS IS THE END OF A COMMENT BLOCK, BLOCK TO BE DELETED -->
+    <title>Sector Intelligence Monitor</title>
+    <meta name="description" content="Sector Intelligence Monitor — multi-quarter financial analysis and investing lens for fintech, defence and biotech sectors." />
+    <link rel="icon" href="/favicon.ico" />
+    <meta property="og:title" content="Sector Intelligence Monitor" />
+    <meta property="og:description" content="Multi-quarter financial analysis and investing lens across sectors" />
+    <meta name="theme-color" content="#0f172a" />
   </head>
 
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    <script
-      defer
-      src="%VITE_ANALYTICS_ENDPOINT%/umami"
-      data-website-id="%VITE_ANALYTICS_WEBSITE_ID%"></script>
+
+    <script>
+      (function() {
+        // Vite will replace %VITE_ANALYTICS_ENDPOINT% and %VITE_ANALYTICS_WEBSITE_ID% at build time.
+        const endpoint = '%VITE_ANALYTICS_ENDPOINT%';
+        const id = '%VITE_ANALYTICS_WEBSITE_ID%';
+        if (endpoint && endpoint !== '%VITE_ANALYTICS_ENDPOINT%' && id && id !== '%VITE_ANALYTICS_WEBSITE_ID%') {
+          try {
+            const s = document.createElement('script');
+            s.defer = true;
+            s.src = endpoint.replace(/\/$/, '') + '/umami';
+            s.setAttribute('data-website-id', id);
+            document.head.appendChild(s);
+          } catch (e) {
+            // swallow - analytics is optional
+            console.warn('Failed to inject analytics script', e);
+          }
+        }
+      })();
+    </script>
+
   </body>
 
 </html>
