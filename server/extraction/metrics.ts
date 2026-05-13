@@ -5,6 +5,10 @@
 import { FintechMetricsSchema, DefenceMetricsSchema, BiotechMetricsSchema } from './metrics.schemas';
 import type { FintechMetrics, DefenceMetrics, BiotechMetrics } from './metrics.schemas';
 
+// Re-export schemas for tests
+export { FintechMetricsSchema, DefenceMetricsSchema, BiotechMetricsSchema };
+export type { FintechMetrics, DefenceMetrics, BiotechMetrics };
+
 // This file provides a lightweight extraction function used by the refresher.
 // In production this should call an LLM with proper prompts and schema enforcement.
 

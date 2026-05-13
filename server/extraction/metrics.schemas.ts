@@ -43,6 +43,13 @@ export const BiotechMetricsSchema = z.object({
     royaltyRevenue: z.number().optional(),
     collaborationRevenue: z.number().optional(),
   }).optional(),
+  clinicalTrialReadouts: z.array(z.object({
+    trialName: z.string().optional(),
+    phase: z.string().optional(),
+    outcome: z.enum(['positive', 'negative', 'mixed', 'pending']).optional(),
+    date: z.string().optional(),
+  })).optional(),
+  aiMLInvestment: z.number().optional(),
 }).strict();
 
 export type FintechMetrics = z.infer<typeof FintechMetricsSchema>;

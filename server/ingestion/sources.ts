@@ -50,7 +50,8 @@ export async function fetchFromSECEdgar(ticker: string, cik: string): Promise<So
       });
     }
   } catch (e) {
-    console.warn(`[SECEdgar] failed for ${ticker}:`, e?.message ?? e);
+    const errorMsg = e instanceof Error ? e.message : String(e);
+    console.warn(`[SECEdgar] failed for ${ticker}:`, errorMsg);
   }
 
   return documents;

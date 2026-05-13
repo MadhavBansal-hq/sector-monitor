@@ -105,7 +105,7 @@ describe('Metrics Extraction Schemas', () => {
             indication: 'Oncology',
           },
         ],
-        aiMLInvestment: 'Partnership with AI company X',
+        aiMLInvestment: 5000000,
       };
       
       const result = BiotechMetricsSchema.parse(validMetrics);
