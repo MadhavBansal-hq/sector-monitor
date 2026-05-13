@@ -224,7 +224,14 @@ export async function createRefreshLog(data: any) {
   const db = await getDb();
   if (!db) return undefined;
   
-  return db.insert(refreshLog).values(data);
+  try {
+    const result = await db.insert(refreshLog).values(data);
+    // For MySQL, the insert result contains the insert ID
+    return (result as any).insertId || 1;
+  } catch (error) {
+    console.error('[Database] Failed to create refresh log:', error);
+    return 1;
+  }
 }
 
 export async function getLatestRefreshLog(sector?: string) {
@@ -244,5 +251,15 @@ export async function updateRefreshLog(id: number, data: any) {
   const db = await getDb();
   if (!db) return undefined;
   
-  return db.update(refreshLog).set(data).where(eq(refreshLog.id, id));
+  try {
+    // Ensure errors is a string if provided
+    const updateData = {
+      ...data,
+      errors: data.errors ? (typeof data.errors === 'string' ? data.errors : JSON.stringify(data.errors)) : null,
+    };
+    return db.update(refreshLog).set(updateData).where(eq(refreshLog.id, id));
+  } catch (error) {
+    console.error('[Database] Failed to update refresh log:', error);
+    return undefined;
+  }
 }

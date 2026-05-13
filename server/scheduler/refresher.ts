@@ -118,19 +118,26 @@ export async function refreshSector(sector: 'fintech' | 'defence' | 'biotech'): 
     }
     
     // Generate synthesis for the sector
-    const quarters = await getMostRecentQuarters(4);
-    const synthesis = await generateSectorSynthesis(sector, quarters);
-    
-    if (!synthesis) {
-      errors.push(`Failed to generate synthesis for ${sector}`);
+    let synthesis: any = null;
+    try {
+      const quarters = await getMostRecentQuarters(4);
+      synthesis = await generateSectorSynthesis(sector, quarters);
+      
+      if (!synthesis) {
+        errors.push(`Failed to generate synthesis for ${sector}`);
+      }
+    } catch (synthError) {
+      const errorMsg = `Error generating synthesis: ${synthError}`;
+      errors.push(errorMsg);
+      console.error(`[Refresh] ${errorMsg}`);
     }
     
     // Update refresh log
-    if (logId) {
-      await updateRefreshLog(logId as any, {
+    if (logId && typeof logId === 'number') {
+      await updateRefreshLog(logId, {
         documentsChecked,
         newDocumentsFound,
-        errors: errors.length > 0 ? JSON.stringify(errors) : null,
+        errors: errors.length > 0 ? errors : [],
         status: 'completed',
       });
     }
@@ -166,15 +173,23 @@ export async function refreshSector(sector: 'fintech' | 'defence' | 'biotech'): 
     console.error(`[Refresh] ${errorMsg}`);
     
     // Update refresh log with failure
-    if (logId) {
-      await updateRefreshLog(logId as any, {
-        errors: JSON.stringify(errors),
-        status: 'failed',
-      });
+    if (logId && typeof logId === 'number') {
+      try {
+        await updateRefreshLog(logId, {
+          errors: errors.length > 0 ? errors : [],
+          status: 'failed',
+        });
+      } catch (updateError) {
+        console.error('[Refresh] Failed to update refresh log:', updateError);
+      }
     }
     
     // Notify of critical failure
-    await notifyCriticalFailure(sector, [], errorMsg);
+    try {
+      await notifyCriticalFailure(sector, [], errorMsg);
+    } catch (notifyError) {
+      console.error('[Refresh] Failed to send notification:', notifyError);
+    }
     
     return {
       sector,
