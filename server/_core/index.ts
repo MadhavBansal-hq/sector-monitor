@@ -64,6 +64,23 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
   registerOAuthRoutes(app);
+  
+  // Scheduled refresh endpoint
+  app.post("/api/scheduled/refresh", async (req, res) => {
+    try {
+      const { handleScheduledRefresh } = await import("../scheduled/refreshHandler");
+      await handleScheduledRefresh(req, res);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      res.status(500).json({
+        error: errorMsg,
+        stack: error instanceof Error ? error.stack : '',
+        context: { url: req.url, taskUid: 'unknown' },
+        timestamp: new Date().toISOString(),
+      });
+    }
+  });
+  
   // tRPC API
   app.use(
     "/api/trpc",
